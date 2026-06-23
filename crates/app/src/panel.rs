@@ -7,7 +7,7 @@ use bevy::sprite::Anchor;
 use bevy::text::TextBounds;
 
 use crate::cards::reveal_done_time;
-use crate::theme::{GOLD, GOLD_DIM, MUTED, PARCHMENT};
+use crate::theme::{Theme, Themed};
 use crate::{DealInfo, Fonts, ReadingData, Selected, Textures};
 
 // Panel geometry (world space).
@@ -39,33 +39,36 @@ fn roman(n: usize) -> &'static str {
         .unwrap_or("")
 }
 
-fn divider(commands: &mut Commands, y: f32, width: f32) {
+fn divider(commands: &mut Commands, theme: &Theme, y: f32, width: f32) {
     commands.spawn((
-        Sprite::from_color(GOLD_DIM.with_alpha(0.5), Vec2::new(width, 1.5)),
+        Sprite::from_color(theme.gold_dim().with_alpha(0.5), Vec2::new(width, 1.5)),
         Transform::from_xyz(PANEL_CX, y, Z_TEXT),
+        Themed::Divider,
     ));
 }
 
 /// Spawn the title block in the top-left corner.
-pub fn spawn_title(commands: &mut Commands, fonts: &Fonts) {
+pub fn spawn_title(commands: &mut Commands, fonts: &Fonts, theme: &Theme) {
     commands.spawn((
         Text2d::new("Taro"),
         TextFont { font: fonts.bold.clone(), font_size: 44.0, ..default() },
-        TextColor(GOLD),
+        TextColor(theme.gold()),
+        Themed::Gold,
         Anchor::TOP_LEFT,
         Transform::from_xyz(-612.0, 400.0, Z_TEXT),
     ));
     commands.spawn((
         Text2d::new("Tarot de Marseille  ·  the Celtic Cross"),
         TextFont { font: fonts.italic.clone(), font_size: 17.0, ..default() },
-        TextColor(MUTED),
+        TextColor(theme.muted()),
+        Themed::Muted,
         Anchor::TOP_LEFT,
         Transform::from_xyz(-610.0, 350.0, Z_TEXT),
     ));
 }
 
 /// Spawn the reading panel scaffold. Text is filled by [`update_panel`].
-pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts) {
+pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts, theme: &Theme) {
     // Background.
     commands.spawn((
         Sprite {
@@ -82,17 +85,19 @@ pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts) 
     commands.spawn((
         Text2d::new("THE READING"),
         TextFont { font: fonts.bold.clone(), font_size: 16.0, ..default() },
-        TextColor(GOLD_DIM),
+        TextColor(theme.gold_dim()),
+        Themed::GoldDim,
         Anchor::TOP_LEFT,
         Transform::from_xyz(TEXT_X, top - 26.0, Z_TEXT),
     ));
-    divider(commands, top - 52.0, TEXT_W);
+    divider(commands, theme, top - 52.0, TEXT_W);
 
     // Position ("I · The Present").
     commands.spawn((
         Text2d::new(""),
         TextFont { font: fonts.regular.clone(), font_size: 18.0, ..default() },
-        TextColor(GOLD),
+        TextColor(theme.gold()),
+        Themed::Gold,
         TextBounds { width: Some(TEXT_W), height: None },
         Anchor::TOP_LEFT,
         Transform::from_xyz(TEXT_X, top - 68.0, Z_TEXT),
@@ -103,30 +108,32 @@ pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts) 
     commands.spawn((
         Text2d::new(""),
         TextFont { font: fonts.bold.clone(), font_size: 27.0, ..default() },
-        TextColor(PARCHMENT),
+        TextColor(theme.parchment()),
+        Themed::Parchment,
         TextBounds { width: Some(TEXT_W), height: None },
         Anchor::TOP_LEFT,
         Transform::from_xyz(TEXT_X, top - 100.0, Z_TEXT),
         PanelCardText,
     ));
 
-    // Orientation.
+    // Orientation (colour set per selection by update_panel, so not Themed).
     commands.spawn((
         Text2d::new(""),
         TextFont { font: fonts.italic.clone(), font_size: 16.0, ..default() },
-        TextColor(MUTED),
+        TextColor(theme.muted()),
         Anchor::TOP_LEFT,
         Transform::from_xyz(TEXT_X, top - 140.0, Z_TEXT),
         PanelOrientationText,
     ));
 
-    divider(commands, top - 162.0, TEXT_W);
+    divider(commands, theme, top - 162.0, TEXT_W);
 
     // Meaning body (wraps within the panel).
     commands.spawn((
         Text2d::new(""),
         TextFont { font: fonts.regular.clone(), font_size: 18.0, ..default() },
-        TextColor(PARCHMENT),
+        TextColor(theme.parchment()),
+        Themed::Parchment,
         TextLayout::new_with_justify(Justify::Left),
         TextBounds { width: Some(TEXT_W), height: Some(360.0) },
         Anchor::TOP_LEFT,
@@ -135,18 +142,20 @@ pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts) 
     ));
 
     // Lower block: what this position means in the spread.
-    divider(commands, PANEL_CY - PANEL_H / 2.0 + 158.0, TEXT_W);
+    divider(commands, theme, PANEL_CY - PANEL_H / 2.0 + 158.0, TEXT_W);
     commands.spawn((
         Text2d::new("THIS POSITION"),
         TextFont { font: fonts.bold.clone(), font_size: 13.0, ..default() },
-        TextColor(GOLD_DIM),
+        TextColor(theme.gold_dim()),
+        Themed::GoldDim,
         Anchor::TOP_LEFT,
         Transform::from_xyz(TEXT_X, PANEL_CY - PANEL_H / 2.0 + 142.0, Z_TEXT),
     ));
     commands.spawn((
         Text2d::new(""),
         TextFont { font: fonts.italic.clone(), font_size: 16.0, ..default() },
-        TextColor(MUTED),
+        TextColor(theme.muted()),
+        Themed::Muted,
         TextLayout::new_with_justify(Justify::Left),
         TextBounds { width: Some(TEXT_W), height: Some(100.0) },
         Anchor::TOP_LEFT,
@@ -156,9 +165,12 @@ pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts) 
 
     // Footer hint.
     commands.spawn((
-        Text2d::new("Click a card to read it\nSpace · new reading    R · reduced motion"),
+        Text2d::new(
+            "Click a card to read it\nSpace · new reading   R · reduced motion   T · theme",
+        ),
         TextFont { font: fonts.italic.clone(), font_size: 14.0, ..default() },
-        TextColor(GOLD_DIM),
+        TextColor(theme.gold_dim()),
+        Themed::GoldDim,
         TextLayout::new_with_justify(Justify::Left),
         Anchor::TOP_LEFT,
         Transform::from_xyz(TEXT_X, PANEL_CY - PANEL_H / 2.0 + 52.0, Z_TEXT),
@@ -173,6 +185,7 @@ pub fn update_panel(
     reading: Res<ReadingData>,
     deal_info: Option<Res<DealInfo>>,
     time: Res<Time>,
+    theme: Res<Theme>,
     mut last: Local<Option<(usize, bool)>>,
     mut sets: ParamSet<(
         Query<&mut Text2d, With<PanelPositionText>>,
@@ -182,6 +195,11 @@ pub fn update_panel(
         Query<&mut Text2d, With<PanelDescriptionText>>,
     )>,
 ) {
+    // A theme swap recolours the orientation tag below, so force a rewrite.
+    if theme.is_changed() {
+        *last = None;
+    }
+
     let revealed = match &deal_info {
         Some(info) => info.reduced || time.elapsed_secs() >= info.t0 + reveal_done_time(selected.0),
         None => false,
@@ -225,7 +243,7 @@ pub fn update_panel(
         } else {
             "Upright".into()
         };
-        color.0 = if reversed { Color::srgb(0.78, 0.52, 0.46) } else { MUTED };
+        color.0 = if reversed { theme.reversed() } else { theme.muted() };
     }
     if let Ok(mut t) = sets.p3().single_mut() {
         **t = meaning;

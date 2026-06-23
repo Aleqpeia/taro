@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::cards::{reveal_done_time, CardView, SpreadEntity};
 use crate::layout::{CARD_H, CARD_W};
-use crate::theme::GOLD;
+use crate::theme::Theme;
 use crate::tween::{FlipReveal, TransformTween};
 use crate::{clear_spread, deal, DealInfo, DebugRedeal, Fonts, Motion, Selected, Textures};
 
@@ -18,6 +18,7 @@ pub fn redeal_input(
     fonts: Res<Fonts>,
     assets: Res<AssetServer>,
     time: Res<Time>,
+    theme: Res<Theme>,
     mut motion: ResMut<Motion>,
     mut selected: ResMut<Selected>,
     spread: Query<Entity, With<SpreadEntity>>,
@@ -29,7 +30,7 @@ pub fn redeal_input(
     if toggle || keys.just_pressed(KeyCode::Space) {
         clear_spread(&mut commands, &spread);
         selected.0 = 0;
-        deal(&mut commands, &textures, &fonts, &assets, motion.reduced, time.elapsed_secs());
+        deal(&mut commands, &textures, &fonts, &assets, &theme, motion.reduced, time.elapsed_secs());
     }
 }
 
@@ -43,6 +44,7 @@ pub fn debug_redeal(
     textures: Res<Textures>,
     fonts: Res<Fonts>,
     assets: Res<AssetServer>,
+    theme: Res<Theme>,
     motion: Res<Motion>,
     mut selected: ResMut<Selected>,
     spread: Query<Entity, With<SpreadEntity>>,
@@ -56,7 +58,7 @@ pub fn debug_redeal(
     dr.done = true;
     clear_spread(&mut commands, &spread);
     selected.0 = 0;
-    deal(&mut commands, &textures, &fonts, &assets, motion.reduced, time.elapsed_secs());
+    deal(&mut commands, &textures, &fonts, &assets, &theme, motion.reduced, time.elapsed_secs());
 }
 
 /// Left-click selects the card under the cursor (topmost wins).
@@ -107,6 +109,7 @@ pub fn card_at(world: Vec2, cards: &[(usize, GlobalTransform)]) -> Option<usize>
 pub fn apply_selection_highlight(
     selected: Res<Selected>,
     time: Res<Time>,
+    theme: Res<Theme>,
     deal_info: Option<Res<DealInfo>>,
     mut cards: Query<(
         &CardView,
@@ -144,9 +147,9 @@ pub fn apply_selection_highlight(
                 rtf.rotation = rot;
                 // Gentle breathing glow.
                 let pulse = 0.45 + 0.12 * (now * 2.2).sin();
-                rsprite.color = GOLD.with_alpha(pulse);
+                rsprite.color = theme.gold().with_alpha(pulse);
             }
-            _ => rsprite.color = GOLD.with_alpha(0.0),
+            _ => rsprite.color = theme.gold().with_alpha(0.0),
         }
     }
 }

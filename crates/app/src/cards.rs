@@ -8,7 +8,7 @@ use std::f32::consts::FRAC_PI_2;
 use taro_domain::{LayoutSlot, Orientation};
 
 use crate::layout::{card_rotation, slot_translation, CARD_H, CARD_W};
-use crate::theme::GOLD;
+use crate::theme::Themed;
 use crate::tween::{Ease, FadeIn, FlipReveal, TransformTween};
 use crate::{Fonts, Textures};
 
@@ -66,6 +66,7 @@ pub fn spawn_card(
     commands: &mut Commands,
     textures: &Textures,
     fonts: &Fonts,
+    gold: Color,
     face: Handle<Image>,
     slot: LayoutSlot,
     orientation: Orientation,
@@ -162,7 +163,8 @@ pub fn spawn_card(
     let mut num = commands.spawn((
         Text2d::new(position_index.to_string()),
         TextFont { font: fonts.bold.clone(), font_size: 15.0, ..default() },
-        TextColor(GOLD.with_alpha(badge_alpha)),
+        TextColor(gold.with_alpha(badge_alpha)),
+        Themed::Gold,
         Anchor::CENTER,
         Transform::from_translation(badge_pos + Vec3::new(0.0, 0.0, 0.1)),
         SpreadEntity,

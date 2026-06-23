@@ -15,6 +15,8 @@ use bevy::asset::RenderAssetUsages;
 use bevy::image::Image;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
+use crate::theme::Rgb;
+
 /// A tiny RGBA8 canvas with alpha-blended drawing helpers.
 struct Canvas {
     w: usize,
@@ -106,16 +108,14 @@ fn rounded_rect_coverage(
 }
 
 /// The felt background: a warm pool of light at the centre fading to a dark,
-/// slightly cool vignette at the edges.
-pub fn vignette_image(w: usize, h: usize) -> Image {
+/// slightly cool vignette at the edges. `center`/`edge` come from the theme.
+pub fn vignette_image(w: usize, h: usize, center: Rgb, edge: Rgb) -> Image {
     let mut c = Canvas::new(w, h);
     let cx = w as f32 / 2.0;
     let cy = h as f32 / 2.0;
     let max_r = (cx * cx + cy * cy).sqrt();
 
     // Base felt + radial gradient (center -> edge).
-    let center = (0.115_f32, 0.085, 0.155); // lifted indigo, lit
-    let edge = (0.030_f32, 0.024, 0.052); // deep shadow
     for y in 0..h {
         for x in 0..w {
             let dx = x as f32 - cx;
@@ -182,20 +182,19 @@ pub fn glow_image(size: usize) -> Image {
 }
 
 /// The reading-panel background: a translucent dark rounded card with a thin
-/// gold hairline border.
-pub fn panel_image(w: usize, h: usize) -> Image {
+/// gold hairline border. `fill`/`gold` come from the theme.
+pub fn panel_image(w: usize, h: usize, fill: Rgb, gold: Rgb) -> Image {
     let mut c = Canvas::new(w, h);
     let fw = w as f32;
     let fh = h as f32;
     let radius = 22.0;
-    let gold = (0.72_f32, 0.60, 0.34);
     for y in 0..h {
         for x in 0..w {
             let fx = x as f32 + 0.5;
             let fy = y as f32 + 0.5;
-            let fill = rounded_rect_coverage(fx, fy, fw, fh, 1.0, radius, 1.2);
-            if fill > 0.0 {
-                c.blend(x, y, 0.085, 0.068, 0.125, fill * 0.92);
+            let cov = rounded_rect_coverage(fx, fy, fw, fh, 1.0, radius, 1.2);
+            if cov > 0.0 {
+                c.blend(x, y, fill.0, fill.1, fill.2, cov * 0.92);
             }
             // Gold hairline just inside the edge.
             let outer = rounded_rect_coverage(fx, fy, fw, fh, 2.0, radius, 0.8);
@@ -209,16 +208,15 @@ pub fn panel_image(w: usize, h: usize) -> Image {
     c.into_image()
 }
 
-/// A small badge disc for position numbers: a dark fill ringed in gold.
-pub fn disc_image(size: usize) -> Image {
+/// A small badge disc for position numbers: a dark fill ringed in gold. Colours
+/// come from the theme.
+pub fn disc_image(size: usize, gold: Rgb, fill: Rgb) -> Image {
     let mut c = Canvas::new(size, size);
     let s = size as f32;
     let cx = s / 2.0;
     let cy = s / 2.0;
     let r = s / 2.0 - 1.0;
     let ring = s * 0.10;
-    let gold = (0.82_f32, 0.68, 0.36);
-    let fill = (0.08_f32, 0.06, 0.11);
     for y in 0..size {
         for x in 0..size {
             let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
@@ -237,19 +235,18 @@ pub fn disc_image(size: usize) -> Image {
     c.into_image()
 }
 
-/// The ornamental card back. Deep indigo field, a faint diagonal lattice, a
-/// double gold frame, and a single eight-point star at the centre.
-pub fn card_back_image(w: usize, h: usize) -> Image {
+/// The ornamental card back. A deep `field`, a faint diagonal lattice, a double
+/// gold frame, and a single eight-point star at the centre. Colours come from
+/// the theme.
+pub fn card_back_image(w: usize, h: usize, field: Rgb, gold: Rgb) -> Image {
     let mut c = Canvas::new(w, h);
     let fw = w as f32;
     let fh = h as f32;
 
-    // Field: deep indigo, faintly darker toward the edges.
-    let field = (0.105_f32, 0.090, 0.205);
+    // Field: deep, faintly darker toward the edges.
     c.fill(field.0, field.1, field.2);
 
     // Faint diagonal lattice for texture (very low alpha gold).
-    let gold = (0.82_f32, 0.68, 0.36);
     let spacing = (fw / 7.0).max(8.0);
     for y in 0..h {
         for x in 0..w {

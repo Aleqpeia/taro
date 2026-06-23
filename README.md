@@ -99,17 +99,40 @@ is watchable but the release build is far smoother.
 | **Left-click a card** | Select it — gold halo, and the panel shows its reading |
 | **Space** | Deal a new reading |
 | **R** | Toggle reduced motion |
+| **T** | Cycle the colour theme |
+| **Resize window** | The whole table scales to fit; the layout never clips |
 | **Close window** | Quit |
+
+## Themes
+
+The entire palette — text, gold accents, the felt vignette, the card back, the
+panel, and the badges — is driven by one [`Theme`](crates/app/src/theme.rs).
+Four presets ship: **midnight** (the default indigo), **emerald**, **wine**, and
+**ash**. Cycle them at runtime with **T**, or pick a starting one:
+
+```bash
+cargo run --release -p taro-app    # then press T to cycle
+TARO_THEME=emerald cargo run --release -p taro-app
+```
+
+## Dynamic resolution
+
+The window is freely resizable. A fit-to-window camera keeps the design canvas
+fully visible and scales it to whatever size and aspect you give it, with the
+felt filling the rest — the spread and panel never clip or drift off-screen.
 
 ## Environment variables
 
 | Variable | Effect |
 | --- | --- |
+| `TARO_THEME=name` | Start in a named theme: `midnight`, `emerald`, `wine`, `ash` |
+| `TARO_WINDOW=WxH` | Initial window size, e.g. `1600x720` (default `1280x860`) |
 | `TARO_REDUCED_MOTION=1` | Start in reduced-motion mode (instant placement) |
 | `TARO_SELECT=N` | Pre-select reading entry `N` (0–9) |
 | `TARO_CAPTURE=path.png` | Screenshot the window once and exit (see below) |
 | `TARO_CAPTURE_AT=secs` | When to capture, in wall-clock seconds (default `3.0`) |
 | `TARO_REDEAL_AT=secs` | Fire one automatic redeal at the given time (debug) |
+| `TARO_CYCLE_THEME_AT=secs` | Fire one automatic theme cycle at the given time (debug) |
 
 The capture variables exist because Taro is developed in a headless, GPU-less
 environment: since "does it look right?" can't be judged from logs, the app can
