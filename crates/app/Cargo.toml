@@ -1,0 +1,29 @@
+[package]
+name = "taro-app"
+description = "Taro desktop application. Phase 3: animated, themed Celtic Cross reading (Bevy)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+taro-domain = { path = "../domain" }
+rand = "0.8"
+
+# Curated Bevy feature set: a 2D sprite app on Linux/Wayland. We avoid the
+# `2d`/`ui` umbrella and `default_platform` features because they pull in audio
+# (alsa) and gamepad (udev) support, whose system libs aren't installed here.
+[dependencies.bevy]
+version = "0.18"
+default-features = false
+features = [
+    "std",
+    "default_app",      # bevy_asset, bevy_log, bevy_state, bevy_window, ...
+    "multi_threaded",
+    "bevy_winit",
+    "wayland",
+    "x11",
+    "2d_bevy_render",   # bevy_render + core_pipeline + sprite render
+    "bevy_sprite",
+    "bevy_image",
+    "png",
+]

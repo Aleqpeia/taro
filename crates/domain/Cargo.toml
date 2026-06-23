@@ -1,0 +1,14 @@
+[package]
+name = "taro-domain"
+description = "Engine-agnostic Tarot de Marseille domain logic: deck, shuffle, spreads, meanings."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"
+
+[dev-dependencies]
+rand = "0.8"
