@@ -5,15 +5,18 @@ use bevy::prelude::*;
 
 use crate::cards::{reveal_done_time, CardView, SpreadEntity};
 use crate::layout::{CARD_H, CARD_W};
+use crate::question::QuestionInput;
 use crate::theme::Theme;
 use crate::tween::{FlipReveal, TransformTween};
 use crate::{clear_spread, deal, DealInfo, DebugRedeal, Fonts, Motion, Selected, Textures};
 
-/// Space deals a new reading; `R` toggles reduced motion and redeals.
+/// Space deals a new reading; `R` toggles reduced motion and redeals. Both are
+/// suppressed while typing a question, so `R`/Space land in the text field.
 #[allow(clippy::too_many_arguments)]
 pub fn redeal_input(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
+    question: Res<QuestionInput>,
     textures: Res<Textures>,
     fonts: Res<Fonts>,
     assets: Res<AssetServer>,
@@ -23,6 +26,9 @@ pub fn redeal_input(
     mut selected: ResMut<Selected>,
     spread: Query<Entity, With<SpreadEntity>>,
 ) {
+    if question.editing {
+        return;
+    }
     let toggle = keys.just_pressed(KeyCode::KeyR);
     if toggle {
         motion.reduced = !motion.reduced;

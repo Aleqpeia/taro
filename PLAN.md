@@ -212,9 +212,13 @@ moves fast; verify the `bevy_tweening` version matches the chosen Bevy version).
   (`TARO_REDUCED_MOTION` env also forces it). Deterministic screenshot harness
   (`TARO_CAPTURE`/`TARO_CAPTURE_AT`) for verifying visuals headlessly.
 
-**Phase 4 — reading UI**
-- Question input, full composed reading text (the panel + selection already
-  cover per-card meanings). This is the first genuinely usable release.
+**Phase 4 — reading UI** ✅ _done_
+- In-app **question input** (top banner; `Enter` to focus, `TARO_QUESTION` to
+  seed) and a **woven full-reading overlay** (`Tab`) that composes the whole
+  spread into one flowing narrative — `taro_domain::compose_reading` (pure,
+  offline, tested), shown over a dimming scrim and gated by the same no-spoiler
+  rule as the panel. The per-card panel + selection (Phase 3) remain. This is
+  the first genuinely usable release.
 
 **Phase 5 — AI deeper reading**
 - `reqwest` streaming call to Claude, async→Bevy bridge, settings for the key.

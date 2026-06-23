@@ -97,6 +97,8 @@ is watchable but the release build is far smoother.
 | Input | Action |
 | --- | --- |
 | **Left-click a card** | Select it — gold halo, and the panel shows its reading |
+| **Enter** | Ask a question — focus the top field, type, `Enter`/`Esc` to commit |
+| **Tab** | Open/close the woven full-reading overlay |
 | **Space** | Deal a new reading |
 | **R** | Toggle reduced motion |
 | **T** | Cycle the colour theme |
@@ -115,6 +117,24 @@ cargo run --release -p taro-app    # then press T to cycle
 TARO_THEME=emerald cargo run --release -p taro-app
 ```
 
+## Question & full reading
+
+Press **Enter** to focus the question field at the top and type what you want to
+ask; `Enter` or `Esc` commits it. The question frames the reading and seeds the
+future AI "deeper reading".
+
+Press **Tab** for the **full reading** — a single woven narrative composed from
+the authored meanings across all ten Celtic Cross positions (the cross, then the
+staff, closing on the Outcome), rather than one card at a time. It opens once the
+deal has finished revealing, and respects the same no-spoiler rule as the panel.
+The composition is pure, deterministic, offline logic in `taro-domain`
+([`compose_reading`](crates/domain/src/reading.rs)).
+
+```bash
+# Start with a question already posed
+TARO_QUESTION="Will the move work out?" cargo run --release -p taro-app
+```
+
 ## Dynamic resolution
 
 The window is freely resizable. A fit-to-window camera keeps the design canvas
@@ -127,12 +147,15 @@ felt filling the rest — the spread and panel never clip or drift off-screen.
 | --- | --- |
 | `TARO_THEME=name` | Start in a named theme: `midnight`, `emerald`, `wine`, `ash` |
 | `TARO_WINDOW=WxH` | Initial window size, e.g. `1600x720` (default `1280x860`) |
+| `TARO_QUESTION="…"` | Seed the querent's question shown in the top banner |
+| `TARO_EDIT_QUESTION=1` | Start with the question field focused (caret blinking) |
 | `TARO_REDUCED_MOTION=1` | Start in reduced-motion mode (instant placement) |
 | `TARO_SELECT=N` | Pre-select reading entry `N` (0–9) |
 | `TARO_CAPTURE=path.png` | Screenshot the window once and exit (see below) |
 | `TARO_CAPTURE_AT=secs` | When to capture, in wall-clock seconds (default `3.0`) |
 | `TARO_REDEAL_AT=secs` | Fire one automatic redeal at the given time (debug) |
 | `TARO_CYCLE_THEME_AT=secs` | Fire one automatic theme cycle at the given time (debug) |
+| `TARO_SHOW_READING_AT=secs` | Open the full-reading overlay at the given time (debug) |
 
 The capture variables exist because Taro is developed in a headless, GPU-less
 environment: since "does it look right?" can't be judged from logs, the app can
@@ -158,7 +181,7 @@ taro/
 │   │   │   ├── spread.rs        # Spread trait, LayoutSlot, PositionDef
 │   │   │   ├── spreads/         # celtic_cross.rs (first spread)
 │   │   │   ├── meanings.rs      # CardMeaning, embedded RON loader
-│   │   │   └── reading.rs       # build_reading()
+│   │   │   └── reading.rs       # build_reading() + compose_reading()
 │   │   ├── data/meanings.ron    # authored upright/reversed meanings (78 cards)
 │   │   └── tests/domain.rs      # deck/meaning/spread invariants
 │   └── app/                    # taro-app — Bevy presentation
@@ -170,6 +193,8 @@ taro/
 │       │   ├── cards.rs         # card + shadow + badge spawning
 │       │   ├── tween.rs         # hand-rolled tween/flip/fade system
 │       │   ├── panel.rs         # reading panel + title
+│       │   ├── question.rs      # question field (top banner) + keyboard capture
+│       │   ├── reading_view.rs  # woven full-reading overlay
 │       │   ├── interact.rs      # click-to-select, redeal, highlight
 │       │   └── capture.rs       # deterministic screenshot harness
 │       └── assets/
@@ -214,7 +239,8 @@ deterministic frame to a PNG and inspect it.
 - [x] **Phase 2** — static Bevy render of a dealt Celtic Cross with real art.
 - [x] **Phase 3** — animation & theming: deal/flip, procedural textures, reading
       panel, interaction, reduced motion.
-- [ ] **Phase 4** — free-text question and a composed full-reading view.
+- [x] **Phase 4** — free-text question input and a composed, woven full-reading
+      overlay across the whole spread.
 - [ ] **Phase 5** — optional AI "deeper reading" (Claude API, streaming).
 - [ ] **Phase 6** — more spreads, sound, AppImage/Flatpak packaging.
 

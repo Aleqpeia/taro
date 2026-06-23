@@ -18,6 +18,6 @@ pub mod spreads {
 pub use card::{Card, Orientation, Rank, Suit};
 pub use deck::{Deck, DrawnCard};
 pub use meanings::{CardMeaning, Meanings};
-pub use reading::{build_reading, Reading, ReadingEntry};
+pub use reading::{build_reading, compose_reading, Reading, ReadingEntry};
 pub use spread::{LayoutSlot, PositionDef, Spread};
 pub use spreads::celtic_cross::CelticCross;

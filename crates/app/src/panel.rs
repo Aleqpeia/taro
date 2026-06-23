@@ -166,7 +166,9 @@ pub fn spawn_panel(commands: &mut Commands, textures: &Textures, fonts: &Fonts, 
     // Footer hint.
     commands.spawn((
         Text2d::new(
-            "Click a card to read it\nSpace · new reading   R · reduced motion   T · theme",
+            "Click a card to read it\n\
+             Enter · ask a question     Tab · full reading\n\
+             Space · new reading   R · reduced motion   T · theme",
         ),
         TextFont { font: fonts.italic.clone(), font_size: 14.0, ..default() },
         TextColor(theme.gold_dim()),

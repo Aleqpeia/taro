@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
-use taro_domain::{build_reading, CelticCross, Deck, Meanings, Spread};
+use taro_domain::{build_reading, compose_reading, CelticCross, Deck, Meanings, Spread};
 
 #[test]
 fn deck_has_78_unique_cards() {
@@ -102,5 +102,42 @@ fn reading_covers_every_position_with_a_real_meaning() {
     for e in &reading.entries {
         assert!(!e.card_name.is_empty());
         assert!(!e.meaning.contains("no meaning available"), "missing meaning at position {}", e.position_index);
+    }
+}
+
+#[test]
+fn composed_reading_weaves_every_card_meaning_and_the_question() {
+    let mut rng = StdRng::seed_from_u64(7);
+    let mut deck = Deck::full();
+    deck.shuffle(&mut rng);
+    let drawn = deck.draw(&mut rng, CelticCross.card_count());
+    let meanings = Meanings::embedded();
+    let reading = build_reading(&CelticCross, &drawn, &meanings);
+
+    let q = "Will the move work out?";
+    let text = compose_reading(&reading, Some(q));
+
+    assert!(text.contains(q), "the question should appear in the narrative");
+    assert!(text.contains("The Cross") && text.contains("The Staff"), "both movements present");
+    for e in &reading.entries {
+        assert!(text.contains(&e.card_name), "card {} missing from narrative", e.card_name);
+        assert!(text.contains(e.meaning.trim()), "meaning for {} missing", e.card_name);
+    }
+}
+
+#[test]
+fn composed_reading_without_question_is_nonempty_and_omits_the_ask() {
+    let mut rng = StdRng::seed_from_u64(3);
+    let mut deck = Deck::full();
+    deck.shuffle(&mut rng);
+    let drawn = deck.draw(&mut rng, CelticCross.card_count());
+    let meanings = Meanings::embedded();
+    let reading = build_reading(&CelticCross, &drawn, &meanings);
+
+    // None and blank are treated the same: a generic frame, no "You asked".
+    for q in [None, Some("   ")] {
+        let text = compose_reading(&reading, q);
+        assert!(!text.trim().is_empty());
+        assert!(!text.contains("You asked"), "no question frame for {q:?}");
     }
 }

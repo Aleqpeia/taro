@@ -10,6 +10,8 @@ mod cards;
 mod interact;
 mod layout;
 mod panel;
+mod question;
+mod reading_view;
 mod textures;
 mod theme;
 mod tween;
@@ -20,6 +22,8 @@ use bevy::window::WindowResolution;
 use rand::thread_rng;
 
 use cards::SpreadEntity;
+use question::QuestionInput;
+use reading_view::ShowFullReading;
 use taro_domain::{build_reading, CelticCross, Deck, LayoutSlot, Meanings, Reading, Spread};
 use theme::{theme_index_by_name, Theme, ThemeIndex, Themed, WIN_H, WIN_W, THEMES};
 
@@ -90,6 +94,13 @@ fn main() {
             Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
         })
         .unwrap_or((WIN_W, WIN_H));
+    // Seed the question (env `TARO_QUESTION`) and optionally start in edit mode
+    // (`TARO_EDIT_QUESTION`), so the harness can screenshot both the field and
+    // the blinking caret without live keystrokes.
+    let question = QuestionInput {
+        text: std::env::var("TARO_QUESTION").unwrap_or_default(),
+        editing: std::env::var("TARO_EDIT_QUESTION").is_ok(),
+    };
 
     App::new()
         .insert_resource(ClearColor(theme.clear()))
@@ -98,6 +109,8 @@ fn main() {
         .insert_resource(Selected(select0))
         .insert_resource(Motion { reduced: reduced_env })
         .insert_resource(DebugRedeal { at: redeal_at, done: false })
+        .insert_resource(question)
+        .insert_resource(ShowFullReading::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Taro — Tarot de Marseille".into(),
@@ -119,6 +132,10 @@ fn main() {
                 interact::select_input,
                 interact::apply_selection_highlight,
                 interact::debug_redeal,
+                question::question_input,
+                question::update_question_text,
+                reading_view::toggle_full_reading,
+                reading_view::update_full_reading,
                 cycle_theme_input,
                 apply_theme,
                 fit_background,
@@ -198,6 +215,8 @@ fn setup_scene(
 
     panel::spawn_title(&mut commands, &fonts, &theme);
     panel::spawn_panel(&mut commands, &textures, &fonts, &theme);
+    question::spawn_question(&mut commands, &fonts, &theme);
+    reading_view::spawn_full_reading(&mut commands, &textures, &fonts, &theme);
 
     deal(&mut commands, &textures, &fonts, &assets, &theme, motion.reduced, time.elapsed_secs());
 }
@@ -277,6 +296,7 @@ fn fit_background(
 fn cycle_theme_input(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    question: Res<QuestionInput>,
     mut at: Local<Option<f32>>,
     mut init: Local<bool>,
     mut idx: ResMut<ThemeIndex>,
@@ -290,7 +310,8 @@ fn cycle_theme_input(
     if env_fire {
         *at = None;
     }
-    if env_fire || keys.just_pressed(KeyCode::KeyT) {
+    // `T` must reach the question field, not cycle the theme, while typing.
+    if env_fire || (!question.editing && keys.just_pressed(KeyCode::KeyT)) {
         idx.0 = (idx.0 + 1) % THEMES.len();
         *theme = THEMES[idx.0];
     }
