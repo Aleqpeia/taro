@@ -1,0 +1,81 @@
+name: release
+
+# Build the Linux AppImage and the Windows zip on every pushed tag, then attach
+# both to a GitHub Release for that tag.
+on:
+  push:
+    tags: ['*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwayland-dev libxkbcommon-dev libx11-dev libxcursor-dev \
+            libxi-dev libxrandr-dev libvulkan-dev
+      - name: Build (release)
+        run: cargo build --release -p taro-app
+      - name: Fetch appimagetool
+        run: |
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool.AppImage
+          chmod +x appimagetool.AppImage
+          ./appimagetool.AppImage --appimage-extract >/dev/null
+      - name: Build AppImage
+        env:
+          APPIMAGETOOL: ${{ github.workspace }}/squashfs-root/AppRun
+          ARCH: x86_64
+        run: bash packaging/linux/build-appimage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/Taro-x86_64.AppImage
+
+  windows:
+    name: Windows zip
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (release)
+        run: cargo build --release -p taro-app
+      - name: Bundle exe + assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path staging | Out-Null
+          Copy-Item target/release/taro-app.exe staging/
+          Copy-Item -Recurse crates/app/assets staging/assets
+          Copy-Item README.md staging/
+          Compress-Archive -Path staging/* -DestinationPath Taro-windows-x86_64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Taro-windows-x86_64.zip
+
+  release:
+    name: Publish release
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Taro ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            artifacts/linux/Taro-x86_64.AppImage
+            artifacts/windows/Taro-windows-x86_64.zip
