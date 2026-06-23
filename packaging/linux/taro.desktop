@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Taro
+GenericName=Tarot Reading
+Comment=Animated Tarot de Marseille fortune-telling (Celtic Cross)
+Exec=taro-app
+Icon=taro
+Categories=Game;Amusement;
+Keywords=tarot;cards;fortune;marseille;divination;
+Terminal=false
