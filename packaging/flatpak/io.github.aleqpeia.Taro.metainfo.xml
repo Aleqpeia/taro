@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.aleqpeia.Taro</id>
+  <name>Taro</name>
+  <summary>Animated Tarot de Marseille readings</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <description>
+    <p>
+      Taro deals an animated Celtic Cross spread from a public-domain
+      Tarot de Marseille deck: shuffle, deal along easing arcs, flip-reveal,
+      and a woven reading across all ten positions. Ask a question, click a
+      card for its meaning, and — with an Anthropic API key — request a
+      deeper reading narrated by Claude.
+    </p>
+    <p>
+      Readings are presented as a mirror for reflection, not predictive fact.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.aleqpeia.Taro.desktop</launchable>
+  <url type="homepage">https://github.com/Aleqpeia/taro</url>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+</component>

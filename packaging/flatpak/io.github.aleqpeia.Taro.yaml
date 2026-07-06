@@ -1,0 +1,50 @@
+# Flatpak manifest for Taro.
+#
+# Bundles a host-built release binary (same approach as the AppImage) rather
+# than compiling inside the sandbox — a from-source flatpak build would need
+# the Rust SDK extension plus a generated cargo-sources.json for offline
+# vendoring, which is Flathub-submission work, not MVP packaging. Run
+# packaging/flatpak/build-flatpak.sh to build + install.
+app-id: io.github.aleqpeia.Taro
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: taro
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # The optional Claude "deeper reading" calls api.anthropic.com.
+  - --share=network
+  # API-key storage in the keyring (taro-app --set-api-key).
+  - --talk-name=org.freedesktop.secrets
+
+modules:
+  - name: taro
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 taro-app /app/bin/taro-app
+      - cp -r assets /app/bin/assets
+      - install -Dm755 taro.sh /app/bin/taro
+      - install -Dm644 io.github.aleqpeia.Taro.desktop
+        /app/share/applications/io.github.aleqpeia.Taro.desktop
+      - install -Dm644 io.github.aleqpeia.Taro.png
+        /app/share/icons/hicolor/512x512/apps/io.github.aleqpeia.Taro.png
+      - install -Dm644 io.github.aleqpeia.Taro.metainfo.xml
+        /app/share/metainfo/io.github.aleqpeia.Taro.metainfo.xml
+    sources:
+      - type: file
+        path: ../../target/release/taro-app
+      - type: dir
+        path: ../../crates/app/assets
+        dest: assets
+      - type: file
+        path: taro.sh
+      - type: file
+        path: io.github.aleqpeia.Taro.desktop
+      - type: file
+        path: io.github.aleqpeia.Taro.png
+      - type: file
+        path: io.github.aleqpeia.Taro.metainfo.xml
