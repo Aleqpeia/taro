@@ -184,7 +184,8 @@ pub fn update_full_reading(
         body = deep.text.clone();
     }
     let hint = if !deep.available {
-        "Set ANTHROPIC_API_KEY to unlock a deeper reading".to_string()
+        "No API key — run `taro-app --set-api-key` (or set ANTHROPIC_API_KEY) for a deeper reading"
+            .to_string()
     } else {
         match deep.state {
             DeepState::Idle => "D — ask Claude for a deeper reading".to_string(),

@@ -77,6 +77,9 @@ struct DebugRedeal {
 }
 
 fn main() {
+    if handle_cli_args() {
+        return;
+    }
     let reduced_env = std::env::var("TARO_REDUCED_MOTION").is_ok();
     let select0 = std::env::var("TARO_SELECT").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
     let redeal_at = std::env::var("TARO_REDEAL_AT").ok().and_then(|s| s.parse().ok());
@@ -112,7 +115,7 @@ fn main() {
         .insert_resource(DebugRedeal { at: redeal_at, done: false })
         .insert_resource(question)
         .insert_resource(ShowFullReading::default())
-        .insert_resource(ai::DeepReading::from_env())
+        .insert_resource(ai::DeepReading::detect())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Taro — Tarot de Marseille".into(),
@@ -146,6 +149,62 @@ fn main() {
             ),
         )
         .run();
+}
+
+/// Key-management verbs that run and exit instead of opening a window.
+/// Returns true when an argument was handled (the caller should return).
+fn handle_cli_args() -> bool {
+    let mut args = std::env::args().skip(1);
+    let Some(arg) = args.next() else { return false };
+    let entry = || keyring::Entry::new(ai::KEYRING_SERVICE, ai::KEYRING_USER);
+    match arg.as_str() {
+        "--set-api-key" => {
+            // Value may follow as an argument, or be piped/typed on stdin so
+            // the key stays out of shell history.
+            let key = args.next().unwrap_or_else(|| {
+                eprintln!("Paste your Anthropic API key and press Enter:");
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                line
+            });
+            let key = key.trim();
+            if key.is_empty() {
+                eprintln!("error: no key given");
+                std::process::exit(1);
+            }
+            match entry().and_then(|e| e.set_password(key)) {
+                Ok(()) => println!("API key stored in the OS keyring (service: taro)."),
+                Err(e) => {
+                    eprintln!("error: could not store the key: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "--clear-api-key" => match entry().and_then(|e| e.delete_credential()) {
+            Ok(()) => println!("API key removed from the OS keyring."),
+            Err(e) => {
+                eprintln!("error: could not remove the key: {e}");
+                std::process::exit(1);
+            }
+        },
+        "--help" | "-h" => {
+            println!(
+                "Taro — animated Tarot de Marseille reading\n\n\
+                 USAGE: taro-app [--set-api-key [KEY] | --clear-api-key]\n\n\
+                 --set-api-key [KEY]  store an Anthropic API key in the OS keyring\n\
+                 \x20                    (omit KEY to type/pipe it on stdin);\n\
+                 \x20                    enables the in-app Claude \"deeper reading\"\n\
+                 --clear-api-key      remove the stored key\n\n\
+                 Without arguments the app window opens. ANTHROPIC_API_KEY in the\n\
+                 environment overrides the keyring."
+            );
+        }
+        other => {
+            eprintln!("error: unknown argument {other:?} (try --help)");
+            std::process::exit(1);
+        }
+    }
+    true
 }
 
 fn setup_assets(

@@ -29,6 +29,27 @@ use crate::{DealInfo, ReadingData};
 const API_URL: &str = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL: &str = "claude-opus-4-8";
 
+/// Identity of the stored secret in the OS keyring.
+pub const KEYRING_SERVICE: &str = "taro";
+pub const KEYRING_USER: &str = "anthropic-api-key";
+
+/// The Anthropic API key: `ANTHROPIC_API_KEY` env wins, then the OS keyring
+/// (stored via `taro-app --set-api-key`). `None` disables the AI path.
+pub fn api_key() -> Option<String> {
+    if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
+        let k = k.trim();
+        if !k.is_empty() {
+            return Some(k.to_string());
+        }
+    }
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .ok()?
+        .get_password()
+        .ok()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+}
+
 const SYSTEM_PROMPT: &str = "You are a thoughtful Tarot de Marseille reader. Interpret the \
     spread holistically: connect the cards across positions rather than reciting them one by \
     one, ground yourself in the traditional meanings provided, and speak directly to the \
@@ -60,15 +81,14 @@ pub struct DeepReading {
     pub state: DeepState,
     pub text: String,
     pub error: String,
-    /// Whether the AI path is enabled at all (`ANTHROPIC_API_KEY` present).
+    /// Whether the AI path is enabled at all (a key in the env or keyring).
     pub available: bool,
     rx: Option<Mutex<Receiver<AiEvent>>>,
 }
 
 impl DeepReading {
-    pub fn from_env() -> Self {
-        let available =
-            std::env::var("ANTHROPIC_API_KEY").is_ok_and(|k| !k.trim().is_empty());
+    pub fn detect() -> Self {
+        let available = api_key().is_some();
         Self { state: DeepState::Idle, text: String::new(), error: String::new(), available, rx: None }
     }
 
@@ -134,8 +154,7 @@ fn spawn_request(prompt: String) -> Receiver<AiEvent> {
 
 /// Blocking POST + SSE read loop, entirely on the worker thread.
 fn run_request(prompt: &str, tx: &Sender<AiEvent>) -> Result<(), String> {
-    let key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|_| "ANTHROPIC_API_KEY is not set".to_string())?;
+    let key = api_key().ok_or_else(|| "no API key in env or keyring".to_string())?;
     let model = std::env::var("TARO_AI_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string());
 
     let body = serde_json::json!({

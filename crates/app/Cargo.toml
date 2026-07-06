@@ -17,6 +17,14 @@ version = "0.12"
 default-features = false
 features = ["blocking", "rustls-tls"]
 
+# OS secret store for the API key (`taro-app --set-api-key`): Secret Service
+# (GNOME Keyring / KWallet) on Linux, native stores on Windows/macOS. The
+# async-secret-service backend is pure Rust (zbus) — sync-secret-service would
+# drag in libdbus C headers.
+[dependencies.keyring]
+version = "3"
+features = ["async-secret-service", "async-io", "crypto-rust", "windows-native", "apple-native"]
+
 # Curated Bevy feature set: a 2D sprite app on Linux/Wayland. We avoid the
 # `2d`/`ui` umbrella and `default_platform` features because they pull in audio
 # (alsa) and gamepad (udev) support, whose system libs aren't installed here.
