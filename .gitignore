@@ -2,3 +2,5 @@
 /dist
 **/*.rs.bk
 Cargo.lock.orig
+/.idea
+/.claude/settings.local.json

@@ -1,0 +1,33 @@
+name: ci
+
+# Build + test on every push and PR (the Phase 0 "CI build on Linux" item).
+# Release packaging lives in release.yml and runs on tags only.
+on:
+  push:
+    branches: ['*']
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Build & test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwayland-dev libxkbcommon-dev libx11-dev libxcursor-dev \
+            libxi-dev libxrandr-dev libvulkan-dev
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace

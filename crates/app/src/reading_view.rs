@@ -12,6 +12,7 @@ use bevy::text::TextBounds;
 
 use taro_domain::compose_reading;
 
+use crate::ai::{DeepReading, DeepState};
 use crate::cards::reveal_done_time;
 use crate::question::QuestionInput;
 use crate::theme::{Theme, Themed, WIN_H, WIN_W};
@@ -20,6 +21,12 @@ use crate::{DealInfo, Fonts, ReadingData, Textures};
 const Z_ROOT: f32 = 60.0;
 /// The last-dealt card (index 9) flips last, so its reveal time gates the whole.
 const LAST_CARD: usize = 9;
+
+/// Whether every card of the current deal has flipped face-up (the no-spoiler
+/// gate shared by the overlay and the deeper-reading trigger).
+pub fn spread_settled(deal_info: Option<&DealInfo>, now: f32) -> bool {
+    deal_info.is_some_and(|info| info.reduced || now >= info.t0 + reveal_done_time(LAST_CARD))
+}
 
 /// Whether the full-reading overlay is showing.
 #[derive(Resource, Default)]
@@ -33,6 +40,8 @@ pub struct FullReadingScrim;
 pub struct FullReadingHeading;
 #[derive(Component)]
 pub struct FullReadingBody;
+#[derive(Component)]
+pub struct FullReadingHint;
 
 /// Spawn the overlay (hidden). Toggled by [`update_full_reading`] via the root's
 /// `Visibility`, which the children inherit.
@@ -87,6 +96,18 @@ pub fn spawn_full_reading(
                 Transform::from_xyz(0.0, 286.0, 2.0),
                 FullReadingBody,
             ));
+            // Hint / status line for the Claude deeper reading (Phase 5).
+            p.spawn((
+                Text2d::new(String::new()),
+                TextFont { font: fonts.italic.clone(), font_size: 14.0, ..default() },
+                TextColor(theme.gold_dim()),
+                Themed::GoldDim,
+                TextLayout::new_with_justify(Justify::Center),
+                TextBounds { width: Some(880.0), height: None },
+                Anchor::BOTTOM_CENTER,
+                Transform::from_xyz(0.0, -334.0, 2.0),
+                FullReadingHint,
+            ));
         });
 }
 
@@ -123,11 +144,13 @@ pub fn update_full_reading(
     deal_info: Option<Res<DealInfo>>,
     time: Res<Time>,
     theme: Res<Theme>,
+    deep: Res<DeepReading>,
     mut root: Query<&mut Visibility, With<FullReadingRoot>>,
     mut scrim: Query<&mut Sprite, With<FullReadingScrim>>,
     mut texts: ParamSet<(
         Query<&mut Text2d, With<FullReadingHeading>>,
         Query<&mut Text2d, With<FullReadingBody>>,
+        Query<&mut Text2d, With<FullReadingHint>>,
     )>,
 ) {
     if let Ok(mut vis) = root.single_mut() {
@@ -141,12 +164,10 @@ pub fn update_full_reading(
     }
 
     // No-spoiler: withhold the woven reading until every card has flipped up.
-    let settled = deal_info
-        .as_ref()
-        .is_some_and(|info| info.reduced || time.elapsed_secs() >= info.t0 + reveal_done_time(LAST_CARD));
+    let settled = spread_settled(deal_info.as_deref(), time.elapsed_secs());
 
     let question = (!q.text.trim().is_empty()).then(|| q.text.trim());
-    let (heading, body) = match (settled, reading.as_ref()) {
+    let (heading, mut body) = match (settled, reading.as_ref()) {
         (true, Some(r)) => (
             question.map_or_else(|| "Your reading".to_string(), |s| format!("“{s}”")),
             compose_reading(&r.0, question),
@@ -157,10 +178,32 @@ pub fn update_full_reading(
         ),
     };
 
+    // The deeper reading, once streaming, takes the body over from the
+    // offline weave (same no-spoiler gate).
+    if settled && !deep.text.is_empty() {
+        body = deep.text.clone();
+    }
+    let hint = if !deep.available {
+        "Set ANTHROPIC_API_KEY to unlock a deeper reading".to_string()
+    } else {
+        match deep.state {
+            DeepState::Idle => "D — ask Claude for a deeper reading".to_string(),
+            DeepState::Streaming if deep.text.is_empty() => {
+                "Claude is contemplating the spread…".to_string()
+            }
+            DeepState::Streaming => "Claude is reading…".to_string(),
+            DeepState::Done => "D — read again   ·   Tab — close".to_string(),
+            DeepState::Error => format!("The deeper reading failed: {}", deep.error),
+        }
+    };
+
     if let Ok(mut t) = texts.p0().single_mut() {
         **t = heading;
     }
     if let Ok(mut t) = texts.p1().single_mut() {
         **t = body;
+    }
+    if let Ok(mut t) = texts.p2().single_mut() {
+        **t = hint;
     }
 }

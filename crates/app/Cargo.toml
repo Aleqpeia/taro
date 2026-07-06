@@ -8,6 +8,14 @@ license.workspace = true
 [dependencies]
 taro-domain = { path = "../domain" }
 rand = "0.8"
+serde_json = "1"
+
+# Claude "deeper reading" (Phase 5): blocking client on a worker thread — the
+# response's Read impl streams SSE lines without needing a tokio runtime.
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["blocking", "rustls-tls"]
 
 # Curated Bevy feature set: a 2D sprite app on Linux/Wayland. We avoid the
 # `2d`/`ui` umbrella and `default_platform` features because they pull in audio

@@ -3,6 +3,7 @@
 
 use bevy::prelude::*;
 
+use crate::ai::DeepReading;
 use crate::cards::{reveal_done_time, CardView, SpreadEntity};
 use crate::layout::{CARD_H, CARD_W};
 use crate::question::QuestionInput;
@@ -24,6 +25,7 @@ pub fn redeal_input(
     theme: Res<Theme>,
     mut motion: ResMut<Motion>,
     mut selected: ResMut<Selected>,
+    mut deep: ResMut<DeepReading>,
     spread: Query<Entity, With<SpreadEntity>>,
 ) {
     if question.editing {
@@ -36,6 +38,7 @@ pub fn redeal_input(
     if toggle || keys.just_pressed(KeyCode::Space) {
         clear_spread(&mut commands, &spread);
         selected.0 = 0;
+        deep.reset();
         deal(&mut commands, &textures, &fonts, &assets, &theme, motion.reduced, time.elapsed_secs());
     }
 }
@@ -53,6 +56,7 @@ pub fn debug_redeal(
     theme: Res<Theme>,
     motion: Res<Motion>,
     mut selected: ResMut<Selected>,
+    mut deep: ResMut<DeepReading>,
     spread: Query<Entity, With<SpreadEntity>>,
 ) {
     let Some(at) = dr.at else {
@@ -64,6 +68,7 @@ pub fn debug_redeal(
     dr.done = true;
     clear_spread(&mut commands, &spread);
     selected.0 = 0;
+    deep.reset();
     deal(&mut commands, &textures, &fonts, &assets, &theme, motion.reduced, time.elapsed_secs());
 }
 

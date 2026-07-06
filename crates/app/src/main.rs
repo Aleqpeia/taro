@@ -5,6 +5,7 @@
 //! shadows, a hand-rolled tween system (bevy_tweening lags two Bevy versions),
 //! the shuffle → deal → reveal animation, and a reading panel.
 
+mod ai;
 mod capture;
 mod cards;
 mod interact;
@@ -111,6 +112,7 @@ fn main() {
         .insert_resource(DebugRedeal { at: redeal_at, done: false })
         .insert_resource(question)
         .insert_resource(ShowFullReading::default())
+        .insert_resource(ai::DeepReading::from_env())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Taro — Tarot de Marseille".into(),
@@ -136,6 +138,8 @@ fn main() {
                 question::update_question_text,
                 reading_view::toggle_full_reading,
                 reading_view::update_full_reading,
+                ai::deep_reading_input,
+                ai::poll_deep_reading,
                 cycle_theme_input,
                 apply_theme,
                 fit_background,
