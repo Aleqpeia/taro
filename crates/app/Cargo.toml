@@ -39,6 +39,7 @@ features = [
     "wayland",
     "x11",
     "2d_bevy_render",   # bevy_render + core_pipeline + sprite render
+    "ui_bevy_render",   # bevy_ui + UI render (scrollable overlay) — no audio/gamepad
     "bevy_sprite",
     "bevy_image",
     "png",

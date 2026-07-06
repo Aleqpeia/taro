@@ -141,6 +141,7 @@ fn main() {
                 question::update_question_text,
                 reading_view::toggle_full_reading,
                 reading_view::update_full_reading,
+                reading_view::scroll_full_reading,
                 ai::deep_reading_input,
                 ai::poll_deep_reading,
                 cycle_theme_input,
