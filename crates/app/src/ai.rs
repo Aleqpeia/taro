@@ -1,17 +1,21 @@
-//! Phase 5: the optional Claude "deeper reading" — a streamed narrative woven
+//! Phase 5: the optional AI "deeper reading" — a streamed narrative woven
 //! from the drawn spread, layered on top of the offline `compose_reading`.
 //!
-//! There is no official Anthropic Rust SDK, so we call the Messages REST API
-//! directly. Instead of the tokio → Bevy bridge sketched in PLAN.md, the
+//! Three providers are supported: Anthropic (the Messages REST API, called
+//! directly — there is no official Rust SDK), plus OpenRouter and Groq, which
+//! both speak the OpenAI-compatible `chat/completions` protocol and share one
+//! code path. Instead of the tokio → Bevy bridge sketched in PLAN.md, the
 //! request runs on a plain `std::thread` with `reqwest::blocking` (whose
 //! response implements `Read`, so the SSE stream parses line by line) and
 //! feeds text deltas over an `mpsc` channel that [`poll_deep_reading`] drains
 //! each frame. Same effect, no async runtime to plumb through the ECS.
 //!
-//! Fully optional: enabled only when `ANTHROPIC_API_KEY` is set. `D` inside
-//! the full-reading overlay requests a reading; `TARO_AI_MODEL` overrides the
-//! model; the env hook `TARO_DEEP_READING_AT=secs` fires one request for
-//! manual/harness testing.
+//! Fully optional: enabled when any provider has a key (env var or keyring,
+//! stored via `taro-app --set-api-key [PROVIDER]`). `TARO_AI_PROVIDER` picks
+//! the provider explicitly; otherwise the first one with a key wins. `D`
+//! inside the full-reading overlay requests a reading; `TARO_AI_MODEL`
+//! overrides the model; the env hook `TARO_DEEP_READING_AT=secs` fires one
+//! request for manual/harness testing.
 
 use std::io::{BufRead, BufReader};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
@@ -26,23 +30,100 @@ use crate::question::QuestionInput;
 use crate::reading_view::{spread_settled, ShowFullReading};
 use crate::{DealInfo, ReadingData};
 
-const API_URL: &str = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL: &str = "claude-opus-4-8";
-
-/// Identity of the stored secret in the OS keyring.
+/// Service name of the stored secrets in the OS keyring.
 pub const KEYRING_SERVICE: &str = "taro";
-pub const KEYRING_USER: &str = "anthropic-api-key";
 
-/// The Anthropic API key: `ANTHROPIC_API_KEY` env wins, then the OS keyring
-/// (stored via `taro-app --set-api-key`). `None` disables the AI path.
-pub fn api_key() -> Option<String> {
-    if let Ok(k) = std::env::var("ANTHROPIC_API_KEY") {
+/// Which backend serves the deeper reading. Anthropic keeps its native
+/// Messages API; OpenRouter (one key, many hosted models) and Groq (fast
+/// inference with a free tier) both speak the OpenAI-compatible
+/// `chat/completions` protocol, so they share a request/parse path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    Anthropic,
+    OpenRouter,
+    Groq,
+}
+
+impl Provider {
+    /// Detection preference order (also the `--set-api-key` provider names).
+    pub const ALL: [Provider; 3] = [Provider::Anthropic, Provider::OpenRouter, Provider::Groq];
+
+    pub fn from_name(name: &str) -> Option<Provider> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "anthropic" | "claude" => Some(Provider::Anthropic),
+            "openrouter" => Some(Provider::OpenRouter),
+            "groq" => Some(Provider::Groq),
+            _ => None,
+        }
+    }
+
+    /// How the provider is called out in the UI hint line.
+    pub fn label(self) -> &'static str {
+        match self {
+            Provider::Anthropic => "Claude",
+            Provider::OpenRouter => "OpenRouter",
+            Provider::Groq => "Groq",
+        }
+    }
+
+    pub fn key_env(self) -> &'static str {
+        match self {
+            Provider::Anthropic => "ANTHROPIC_API_KEY",
+            Provider::OpenRouter => "OPENROUTER_API_KEY",
+            Provider::Groq => "GROQ_API_KEY",
+        }
+    }
+
+    /// Username of this provider's secret in the OS keyring.
+    pub fn keyring_user(self) -> &'static str {
+        match self {
+            Provider::Anthropic => "anthropic-api-key",
+            Provider::OpenRouter => "openrouter-api-key",
+            Provider::Groq => "groq-api-key",
+        }
+    }
+
+    fn api_url(self) -> &'static str {
+        match self {
+            Provider::Anthropic => "https://api.anthropic.com/v1/messages",
+            Provider::OpenRouter => "https://openrouter.ai/api/v1/chat/completions",
+            Provider::Groq => "https://api.groq.com/openai/v1/chat/completions",
+        }
+    }
+
+    fn default_model(self) -> &'static str {
+        match self {
+            Provider::Anthropic => "claude-opus-4-8",
+            // Let OpenRouter route to a suitable model; TARO_AI_MODEL can pin
+            // a specific one (e.g. a reasoning model) instead.
+            Provider::OpenRouter => "openrouter/auto",
+            Provider::Groq => "llama-3.3-70b-versatile",
+        }
+    }
+
+    /// The active provider: `TARO_AI_PROVIDER` wins when set (and names a
+    /// known provider), otherwise the first provider with a key. `None`
+    /// disables the AI path.
+    pub fn detect() -> Option<Provider> {
+        if let Ok(name) = std::env::var("TARO_AI_PROVIDER") {
+            if !name.trim().is_empty() {
+                return Provider::from_name(&name).filter(|p| api_key(*p).is_some());
+            }
+        }
+        Provider::ALL.into_iter().find(|p| api_key(*p).is_some())
+    }
+}
+
+/// A provider's API key: its env var wins, then the OS keyring (stored via
+/// `taro-app --set-api-key [PROVIDER]`).
+pub fn api_key(provider: Provider) -> Option<String> {
+    if let Ok(k) = std::env::var(provider.key_env()) {
         let k = k.trim();
         if !k.is_empty() {
             return Some(k.to_string());
         }
     }
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+    keyring::Entry::new(KEYRING_SERVICE, provider.keyring_user())
         .ok()?
         .get_password()
         .ok()
@@ -81,15 +162,25 @@ pub struct DeepReading {
     pub state: DeepState,
     pub text: String,
     pub error: String,
-    /// Whether the AI path is enabled at all (a key in the env or keyring).
-    pub available: bool,
+    /// The provider that will serve the reading; `None` disables the AI path
+    /// (no key found for any provider).
+    pub provider: Option<Provider>,
     rx: Option<Mutex<Receiver<AiEvent>>>,
 }
 
 impl DeepReading {
     pub fn detect() -> Self {
-        let available = api_key().is_some();
-        Self { state: DeepState::Idle, text: String::new(), error: String::new(), available, rx: None }
+        Self {
+            state: DeepState::Idle,
+            text: String::new(),
+            error: String::new(),
+            provider: Provider::detect(),
+            rx: None,
+        }
+    }
+
+    pub fn available(&self) -> bool {
+        self.provider.is_some()
     }
 
     /// Forget any in-flight or finished reading (used on redeals; dropping the
@@ -123,9 +214,27 @@ pub fn build_prompt(reading: &Reading, question: Option<&str>) -> String {
     p
 }
 
-/// Parse one SSE line into an event. Lines that aren't `data:` payloads, and
-/// stream events we don't act on (message_start, content_block_start, thinking
-/// deltas, pings...), yield `None`.
+/// Parse one OpenAI-style SSE line (OpenRouter, Groq) into an event. Lines
+/// that aren't `data:` payloads, role-only/empty deltas, and reasoning deltas
+/// (reasoning models stream those separately) yield `None`.
+pub fn parse_openai_sse_line(line: &str) -> Option<AiEvent> {
+    let data = line.strip_prefix("data:")?.trim();
+    if data == "[DONE]" {
+        return Some(AiEvent::Done);
+    }
+    let v: serde_json::Value = serde_json::from_str(data).ok()?;
+    if let Some(msg) = v["error"]["message"].as_str() {
+        return Some(AiEvent::Error(msg.to_string()));
+    }
+    v["choices"][0]["delta"]["content"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(|s| AiEvent::Delta(s.to_string()))
+}
+
+/// Parse one Anthropic SSE line into an event. Lines that aren't `data:`
+/// payloads, and stream events we don't act on (message_start,
+/// content_block_start, thinking deltas, pings...), yield `None`.
 pub fn parse_sse_line(line: &str) -> Option<AiEvent> {
     let data = line.strip_prefix("data:")?.trim();
     let v: serde_json::Value = serde_json::from_str(data).ok()?;
@@ -154,32 +263,52 @@ fn spawn_request(prompt: String) -> Receiver<AiEvent> {
 
 /// Blocking POST + SSE read loop, entirely on the worker thread.
 fn run_request(prompt: &str, tx: &Sender<AiEvent>) -> Result<(), String> {
-    let key = api_key().ok_or_else(|| "no API key in env or keyring".to_string())?;
-    let model = std::env::var("TARO_AI_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string());
+    let provider = Provider::detect().ok_or_else(|| "no API key in env or keyring".to_string())?;
+    let key = api_key(provider)
+        .ok_or_else(|| format!("no {} API key in env or keyring", provider.label()))?;
+    let model =
+        std::env::var("TARO_AI_MODEL").unwrap_or_else(|_| provider.default_model().to_string());
 
-    let body = serde_json::json!({
-        "model": model,
-        "max_tokens": 4000,
-        "stream": true,
-        "thinking": {"type": "adaptive"},
-        "system": SYSTEM_PROMPT,
-        "messages": [{"role": "user", "content": prompt}],
-    });
+    let body = match provider {
+        Provider::Anthropic => serde_json::json!({
+            "model": model,
+            "max_tokens": 4000,
+            "stream": true,
+            "thinking": {"type": "adaptive"},
+            "system": SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": prompt}],
+        }),
+        // OpenAI-compatible: the system prompt rides as the first message.
+        Provider::OpenRouter | Provider::Groq => serde_json::json!({
+            "model": model,
+            "max_tokens": 4000,
+            "stream": true,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        }),
+    };
 
     let client = reqwest::blocking::Client::builder()
-        // No whole-request deadline: the stream stays open while Claude types.
+        // No whole-request deadline: the stream stays open while the model types.
         .timeout(None)
         .connect_timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client
-        .post(API_URL)
-        .header("x-api-key", key)
-        .header("anthropic-version", "2023-06-01")
+    let req = client
+        .post(provider.api_url())
         .header("content-type", "application/json")
-        .body(body.to_string())
-        .send()
-        .map_err(|e| e.to_string())?;
+        .body(body.to_string());
+    let req = match provider {
+        Provider::Anthropic => req
+            .header("x-api-key", key)
+            .header("anthropic-version", "2023-06-01"),
+        Provider::OpenRouter | Provider::Groq => {
+            req.header("authorization", format!("Bearer {key}"))
+        }
+    };
+    let resp = req.send().map_err(|e| e.to_string())?;
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -191,9 +320,13 @@ fn run_request(prompt: &str, tx: &Sender<AiEvent>) -> Result<(), String> {
         return Err(format!("{status}: {msg}"));
     }
 
+    let parse: fn(&str) -> Option<AiEvent> = match provider {
+        Provider::Anthropic => parse_sse_line,
+        Provider::OpenRouter | Provider::Groq => parse_openai_sse_line,
+    };
     for line in BufReader::new(resp).lines() {
         let line = line.map_err(|e| e.to_string())?;
-        match parse_sse_line(&line) {
+        match parse(&line) {
             Some(AiEvent::Done) => {
                 let _ = tx.send(AiEvent::Done);
                 return Ok(());
@@ -211,9 +344,9 @@ fn run_request(prompt: &str, tx: &Sender<AiEvent>) -> Result<(), String> {
     Ok(())
 }
 
-/// `D` inside the full-reading overlay asks Claude for a deeper reading, once
-/// the spread has settled. The env `TARO_DEEP_READING_AT=secs` fires one
-/// request without a keypress.
+/// `D` inside the full-reading overlay asks the AI provider for a deeper
+/// reading, once the spread has settled. The env `TARO_DEEP_READING_AT=secs`
+/// fires one request without a keypress.
 #[allow(clippy::too_many_arguments)]
 pub fn deep_reading_input(
     keys: Res<ButtonInput<KeyCode>>,
@@ -237,7 +370,7 @@ pub fn deep_reading_input(
         return;
     }
 
-    if !dr.available || dr.state == DeepState::Streaming {
+    if !dr.available() || dr.state == DeepState::Streaming {
         return;
     }
     let Some(reading) = reading else { return };
@@ -346,5 +479,44 @@ mod tests {
             Some(AiEvent::Error(m)) => assert_eq!(m, "Overloaded"),
             _ => panic!("expected an error event"),
         }
+    }
+
+    #[test]
+    fn openai_sse_content_deltas_and_done_parse() {
+        let delta = r#"data: {"id":"x","choices":[{"index":0,"delta":{"content":"The cards"}}]}"#;
+        match parse_openai_sse_line(delta) {
+            Some(AiEvent::Delta(s)) => assert_eq!(s, "The cards"),
+            _ => panic!("expected a content delta"),
+        }
+        assert!(matches!(parse_openai_sse_line("data: [DONE]"), Some(AiEvent::Done)));
+    }
+
+    #[test]
+    fn openai_sse_noise_is_ignored() {
+        assert!(parse_openai_sse_line(": OPENROUTER PROCESSING").is_none());
+        assert!(parse_openai_sse_line("").is_none());
+        // Role-only first chunk and empty-content keepalives carry no text.
+        let role = r#"data: {"choices":[{"delta":{"role":"assistant","content":""}}]}"#;
+        assert!(parse_openai_sse_line(role).is_none());
+        // Reasoning-model deltas must not leak into the reading.
+        let reasoning = r#"data: {"choices":[{"delta":{"reasoning":"hmm"}}]}"#;
+        assert!(parse_openai_sse_line(reasoning).is_none());
+    }
+
+    #[test]
+    fn openai_sse_error_events_surface_the_message() {
+        let err = r#"data: {"error":{"message":"Rate limit exceeded","code":429}}"#;
+        match parse_openai_sse_line(err) {
+            Some(AiEvent::Error(m)) => assert_eq!(m, "Rate limit exceeded"),
+            _ => panic!("expected an error event"),
+        }
+    }
+
+    #[test]
+    fn provider_names_resolve() {
+        assert_eq!(Provider::from_name("OpenRouter"), Some(Provider::OpenRouter));
+        assert_eq!(Provider::from_name("groq"), Some(Provider::Groq));
+        assert_eq!(Provider::from_name("claude"), Some(Provider::Anthropic));
+        assert_eq!(Provider::from_name("mystery"), None);
     }
 }

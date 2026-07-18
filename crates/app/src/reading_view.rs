@@ -268,19 +268,20 @@ pub fn update_full_reading(
     if settled && !deep.text.is_empty() {
         body = deep.text.clone();
     }
-    let hint = if !deep.available {
-        "No API key — run `taro-app --set-api-key` (or set ANTHROPIC_API_KEY) for a deeper reading"
-            .to_string()
-    } else {
+    let hint = if let Some(provider) = deep.provider {
+        let who = provider.label();
         match deep.state {
-            DeepState::Idle => "D — ask Claude for a deeper reading".to_string(),
+            DeepState::Idle => format!("D — ask {who} for a deeper reading"),
             DeepState::Streaming if deep.text.is_empty() => {
-                "Claude is contemplating the spread…".to_string()
+                format!("{who} is contemplating the spread…")
             }
-            DeepState::Streaming => "Claude is reading…".to_string(),
+            DeepState::Streaming => format!("{who} is reading…"),
             DeepState::Done => "D — read again   ·   ↑↓ — scroll   ·   Tab — close".to_string(),
             DeepState::Error => format!("The deeper reading failed: {}", deep.error),
         }
+    } else {
+        "No API key — run `taro-app --set-api-key [anthropic|openrouter|groq]` for a deeper reading"
+            .to_string()
     };
 
     if let Ok(mut t) = texts.p0().single_mut() {

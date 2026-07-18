@@ -157,13 +157,26 @@ fn main() {
 fn handle_cli_args() -> bool {
     let mut args = std::env::args().skip(1);
     let Some(arg) = args.next() else { return false };
-    let entry = || keyring::Entry::new(ai::KEYRING_SERVICE, ai::KEYRING_USER);
+    // An optional provider name (anthropic | openrouter | groq) may follow
+    // either key verb; it defaults to anthropic so existing usage still works.
+    let mut take_provider = |next: &mut Option<String>| -> ai::Provider {
+        *next = args.next();
+        match next.as_deref().and_then(ai::Provider::from_name) {
+            Some(p) => {
+                *next = args.next();
+                p
+            }
+            None => ai::Provider::Anthropic,
+        }
+    };
     match arg.as_str() {
         "--set-api-key" => {
+            let mut next = None;
+            let provider = take_provider(&mut next);
             // Value may follow as an argument, or be piped/typed on stdin so
             // the key stays out of shell history.
-            let key = args.next().unwrap_or_else(|| {
-                eprintln!("Paste your Anthropic API key and press Enter:");
+            let key = next.unwrap_or_else(|| {
+                eprintln!("Paste your {} API key and press Enter:", provider.label());
                 let mut line = String::new();
                 let _ = std::io::stdin().read_line(&mut line);
                 line
@@ -173,31 +186,44 @@ fn handle_cli_args() -> bool {
                 eprintln!("error: no key given");
                 std::process::exit(1);
             }
-            match entry().and_then(|e| e.set_password(key)) {
-                Ok(()) => println!("API key stored in the OS keyring (service: taro)."),
+            let entry = keyring::Entry::new(ai::KEYRING_SERVICE, provider.keyring_user());
+            match entry.and_then(|e| e.set_password(key)) {
+                Ok(()) => println!(
+                    "{} API key stored in the OS keyring (service: taro).",
+                    provider.label()
+                ),
                 Err(e) => {
                     eprintln!("error: could not store the key: {e}");
                     std::process::exit(1);
                 }
             }
         }
-        "--clear-api-key" => match entry().and_then(|e| e.delete_credential()) {
-            Ok(()) => println!("API key removed from the OS keyring."),
-            Err(e) => {
-                eprintln!("error: could not remove the key: {e}");
-                std::process::exit(1);
+        "--clear-api-key" => {
+            let mut next = None;
+            let provider = take_provider(&mut next);
+            let entry = keyring::Entry::new(ai::KEYRING_SERVICE, provider.keyring_user());
+            match entry.and_then(|e| e.delete_credential()) {
+                Ok(()) => println!("{} API key removed from the OS keyring.", provider.label()),
+                Err(e) => {
+                    eprintln!("error: could not remove the key: {e}");
+                    std::process::exit(1);
+                }
             }
-        },
+        }
         "--help" | "-h" => {
             println!(
                 "Taro — animated Tarot de Marseille reading\n\n\
-                 USAGE: taro-app [--set-api-key [KEY] | --clear-api-key]\n\n\
-                 --set-api-key [KEY]  store an Anthropic API key in the OS keyring\n\
+                 USAGE: taro-app [--set-api-key [PROVIDER] [KEY] | --clear-api-key [PROVIDER]]\n\n\
+                 --set-api-key [PROVIDER] [KEY]\n\
+                 \x20                    store an API key in the OS keyring; PROVIDER is\n\
+                 \x20                    anthropic (default), openrouter, or groq\n\
                  \x20                    (omit KEY to type/pipe it on stdin);\n\
-                 \x20                    enables the in-app Claude \"deeper reading\"\n\
-                 --clear-api-key      remove the stored key\n\n\
-                 Without arguments the app window opens. ANTHROPIC_API_KEY in the\n\
-                 environment overrides the keyring."
+                 \x20                    enables the in-app AI \"deeper reading\"\n\
+                 --clear-api-key [PROVIDER]\n\
+                 \x20                    remove the stored key for PROVIDER (default anthropic)\n\n\
+                 Without arguments the app window opens. Env vars override the keyring:\n\
+                 ANTHROPIC_API_KEY / OPENROUTER_API_KEY / GROQ_API_KEY set keys,\n\
+                 TARO_AI_PROVIDER picks the provider, TARO_AI_MODEL picks the model."
             );
         }
         other => {
